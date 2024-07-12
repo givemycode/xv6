@@ -274,7 +274,7 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
-
+  np->mask = p->mask;// 跟踪掩码从父copy到子
   np->parent = p;
 
   // copy saved user registers.
@@ -294,6 +294,9 @@ fork(void)
   pid = np->pid;
 
   np->state = RUNNABLE;
+
+  // 子进程复制父进程的 mask 
+  np->mask = p->mask;
 
   release(&np->lock);
 
