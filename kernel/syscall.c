@@ -105,7 +105,7 @@ extern uint64 sys_wait(void);
 extern uint64 sys_write(void);
 extern uint64 sys_uptime(void);
 extern uint64 sys_trace(void);
-
+extern uint64 sys_sysinfo(void);
 
 static uint64 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -130,6 +130,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_trace]   sys_trace,
+[SYS_sysinfo]   sys_sysinfo,
 };
 
 void syscall(void)
@@ -142,7 +143,7 @@ void syscall(void)
   "read", "kill", "exec", "fstat", "chdir", 
   "dup", "getpid", "sbrk", "sleep", "uptime", 
   "open", "write", "mknod", "unlink", "link", 
-  "mkdir", "close", "trace",};
+  "mkdir", "close", "trace","sysinfo",};
 
   num = p->trapframe->a7;
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
