@@ -323,6 +323,7 @@ sfence_vma()
 #define PGSIZE 4096 // bytes per page
 #define PGSHIFT 12  // bits of offset within a page
 
+// 偏移量
 #define PGROUNDUP(sz)  (((sz)+PGSIZE-1) & ~(PGSIZE-1))
 #define PGROUNDDOWN(a) (((a)) & ~(PGSIZE-1))
 
@@ -332,11 +333,13 @@ sfence_vma()
 #define PTE_X (1L << 3)
 #define PTE_U (1L << 4) // 1 -> user can access
 
-// shift a physical address to the right place for a PTE.
+// 一个物理地址转换为页表条目的地址
 #define PA2PTE(pa) ((((uint64)pa) >> 12) << 10)
 
+//  PTE转换为物理地址
 #define PTE2PA(pte) (((pte) >> 10) << 12)
 
+// 取出PTE中的标志位
 #define PTE_FLAGS(pte) ((pte) & 0x3FF)
 
 // extract the three 9-bit page table indices from a virtual address.
@@ -348,7 +351,11 @@ sfence_vma()
 // MAXVA is actually one bit less than the max allowed by
 // Sv39, to avoid having to sign-extend virtual addresses
 // that have the high bit set.
+// 虚拟地址的范围
 #define MAXVA (1L << (9 + 9 + 9 + 12 - 1))
 
+// 页表项
 typedef uint64 pte_t;
+
+// 一个页表，包含多个 pte_t 类型的条目
 typedef uint64 *pagetable_t; // 512 PTEs
