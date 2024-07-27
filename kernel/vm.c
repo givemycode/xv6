@@ -412,23 +412,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
-  uint64 n, va0, pa0;
-
-  while(len > 0){
-    va0 = PGROUNDDOWN(srcva);
-    pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
-      return -1;
-    n = PGSIZE - (srcva - va0);
-    if(n > len)
-      n = len;
-    memmove(dst, (void *)(pa0 + (srcva - va0)), n);
-
-    len -= n;
-    dst += n;
-    srcva = va0 + PGSIZE;
-  }
-  return 0;
+    return copyin_new(pagetable, dst, srcva, len);
 }
 
 // Copy a null-terminated string from user to kernel.
@@ -438,40 +422,7 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 int
 copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
-  uint64 n, va0, pa0;
-  int got_null = 0;
-
-  while(got_null == 0 && max > 0){
-    va0 = PGROUNDDOWN(srcva);
-    pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
-      return -1;
-    n = PGSIZE - (srcva - va0);
-    if(n > max)
-      n = max;
-
-    char *p = (char *) (pa0 + (srcva - va0));
-    while(n > 0){
-      if(*p == '\0'){
-        *dst = '\0';
-        got_null = 1;
-        break;
-      } else {
-        *dst = *p;
-      }
-      --n;
-      --max;
-      p++;
-      dst++;
-    }
-
-    srcva = va0 + PGSIZE;
-  }
-  if(got_null){
-    return 0;
-  } else {
-    return -1;
-  }
+    return copyinstr_new(pagetable, dst, srcva, max);
 }
 
 void vmp(pagetable_t pagetable,uint64 level){
@@ -500,4 +451,25 @@ void vmp(pagetable_t pagetable,uint64 level){
 void vmprint(pagetable_t pagetable){
   printf("page table %p\n", pagetable);
   vmp(pagetable, 1);
+}
+
+int
+uvmcopy_not_physical(pagetable_t old, pagetable_t new, uint64 begin, uint64 end)
+{
+  pte_t *pte, *newPte;
+  uint64 pa, i;
+  uint flags;
+  // char* mem;
+
+  for(i = PGROUNDDOWN(begin); i < end; i += PGSIZE){
+    if((pte = walk(old, i, 0)) == 0)
+      panic("uvmcopy_not_physical: pte should exist");
+    if((newPte = walk(new, i, 1)) == 0)
+      panic("uvmcopy_not_physical:page not present");
+    pa = PTE2PA(*pte);
+    flags = PTE_FLAGS(*pte) & (~PTE_U);
+
+    *newPte = PA2PTE(pa) | flags;
+  }
+  return 0;
 }

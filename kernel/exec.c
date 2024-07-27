@@ -49,8 +49,13 @@ exec(char *path, char **argv)
     if(ph.vaddr + ph.memsz < ph.vaddr)
       goto bad;
     uint64 sz1;
+
     if((sz1 = uvmalloc(pagetable, sz, ph.vaddr + ph.memsz)) == 0)
       goto bad;
+    // 添加检测，防止程序大小超过 PLIC
+    if(sz1 >= PLIC)
+     goto bad;
+
     sz = sz1;
     if(ph.vaddr % PGSIZE != 0)
       goto bad;
@@ -111,6 +116,12 @@ exec(char *path, char **argv)
   // Commit to the user image.
   oldpagetable = p->pagetable;
   p->pagetable = pagetable;
+
+
+//  清除内核页表中对程序内存的旧映射，然后重新建立映射。
+  uvmunmap(p->proc_kernel_pagetable, 0, PGROUNDDOWN(p->sz)/PGSIZE, 0);
+  uvmcopy_not_physical(pagetable, p->proc_kernel_pagetable, 0, sz);
+  
   p->sz = sz;
   p->trapframe->epc = elf.entry;  // initial program counter = main
   p->trapframe->sp = sp; // initial stack pointer

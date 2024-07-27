@@ -109,7 +109,11 @@ int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
 pte_t * walk(pagetable_t pagetable, uint64 va, int alloc);
+int uvmcopy_not_physical(pagetable_t old, pagetable_t new, uint64 begin, uint64 end);
 
+// vmcopyin.c
+int copyin_new(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len);
+int copyinstr_new(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
@@ -184,6 +188,7 @@ void            vmp(pagetable_t pagetable, uint64 level);
 void            vmprint(pagetable_t);
 void            ukvmmap(pagetable_t kpagetable, uint64 va, uint64 pa, uint64 sz, int perm);
 pagetable_t     ukvminit();
+
 
 
 // plic.c
