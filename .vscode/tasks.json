@@ -1,0 +1,32 @@
+{
+    "version": "2.0.0",
+      "tasks": [{
+      "label": "Compile",
+      // 任务名称，与 launch.json 的 preLaunchTask 相对应
+      "command": "gcc",
+      // 要使用的编译器，C++ 用 g++
+      "args": ["${file}", "-o", // 指定输出文件名，不加该参数则默认输出 a.exe，Linux 下默认 a.out
+        "${fileDirname}/${fileBasenameNoExtension}.exe", "-g", // 生成和调试有关的信息
+        "-Wall", // 开启额外警告
+        "-static-libgcc", // 静态链接 libgcc，一般都会加上
+        "-fexec-charset=GBK", // 生成的程序使用 GBK 编码，不加这一条会导致 Win 下输出中文乱码
+        // "-std=c11", // C++ 最新标准为 c++17，或根据自己的需要进行修改
+      ],
+      // 编译的命令，其实相当于 VSC 帮你在终端中输了这些东西
+      "type": "process",
+      // process 是 vsc 把预定义变量和转义解析后直接全部传给 command；shell 相当于先打开 shell 再输入命令，所以 args 还会经过 shell 再解析一遍
+      "group": {
+        "kind": "build",
+        "isDefault": true // 不为 true 时就要 ctrl+shift+B 手动选择了
+      },
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        // 执行任务时是否跳转到终端面板，可以为 always，silent，never。具体参见 VSC 的文档
+        "focus": false,
+        // 设为 true 后可以使执行 task 时焦点聚集在终端，但对编译 C/C++ 来说，设为 true 没有意义
+        "panel": "shared" // 不同的文件的编译信息共享一个终端面板
+      },
+      // "problemMatcher":"$gcc" // 此选项可以捕捉编译时终端里的报错信息；但因为有 Lint，再开这个可能有双重报错
+    }]
+  }
