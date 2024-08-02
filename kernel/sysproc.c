@@ -70,6 +70,7 @@ sys_sleep(void)
     sleep(&ticks, &tickslock);
   }
   release(&tickslock);
+  backtrace();//添加
   return 0;
 }
 
