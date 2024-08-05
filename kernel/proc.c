@@ -102,6 +102,13 @@ allocproc(void)
       release(&p->lock);
     }
   }
+  //......
+  p->context.sp = p->kstack + PGSIZE;
+
+  p->interval = 0;  
+  p->handler = 0;	  
+  p->ticks = 0;    
+
   return 0;
 
 found:
