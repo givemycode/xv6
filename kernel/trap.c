@@ -43,30 +43,62 @@ usertrap(void)
 
   // send interrupts and exceptions to kerneltrap(),
   // since we're now in the kernel.
+  // 这意味着当处理完当前的陷入或中断后，控制权将转移到 kernelvec
   w_stvec((uint64)kernelvec);
 
+  // 使用 myproc() 函数获取当前正在运行的进程的指针
   struct proc *p = myproc();
   
   // save user program counter.
+  // 将用户程序计数器（sepc）保存到当前进程的陷入帧中
+  // epc 表示当前执行的指令地址
   p->trapframe->epc = r_sepc();
   
+  // 如果 scause 为 8，表示发生了系统调用
   if(r_scause() == 8){
     // system call
-
+    // 如果进程已被标记为杀死 (killed)，则退出进程
     if(p->killed)
       exit(-1);
 
     // sepc points to the ecall instruction,
     // but we want to return to the next instruction.
+    // 将 epc 增加 4，以跳过系统调用指令，返回到下一条指令
     p->trapframe->epc += 4;
 
     // an interrupt will change sstatus &c registers,
     // so don't enable until done with those registers.
+    // 允许中断 (intr_on)，然后调用 syscall() 执行系统调用
     intr_on();
-
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  }
+  //添加r_scause = 13和15的情况
+  else if(r_scause() == 13 || r_scause() == 15){
+      // 引起pagefault的虚拟地址，需要分配物理内存并映射
+      uint64 va = r_stval();
+      // 向下取整
+      va = PGROUNDDOWN(va);
+      // 分配内存
+      uint64 ka = (uint64)kalloc(); 
+      if(ka == 0){ 
+      // 分配物理内存失败，则杀死进程，且打印相关信息 
+          p->killed = 1; 
+          printf("usertrap(): kalloc() failed\n");
+      }else{
+      // 初始化置0
+      memset((void*)ka, 0, PGSIZE); 
+      if(mappages(p->pagetable, va, PGSIZE, ka, PTE_U | PTE_W| PTE_R) != 0)
+      {
+        // 映射失败，则杀死进程，且打印相关信息
+        kfree((void*)ka);
+        printf("usertrap(): mappages() failed\n");
+        p->killed = 1;
+      }
+    }
+  } 
+  else if((which_dev = devintr()) != 0){
     // ok
+    // 如果 devintr() 返回非零值，表示有设备中断发生
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
@@ -79,7 +111,8 @@ usertrap(void)
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
     yield();
-
+  
+  // 最后，调用 usertrapret() 恢复到用户模式继续执行
   usertrapret();
 }
 

@@ -181,9 +181,11 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
 
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
     if((pte = walk(pagetable, a, 0)) == 0)
-      panic("uvmunmap: walk");
+      // panic("uvmunmap: walk");
+      continue;
     if((*pte & PTE_V) == 0)
-      panic("uvmunmap: not mapped");
+      // panic("uvmunmap: not mapped");
+      continue;
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -225,29 +227,42 @@ uvminit(pagetable_t pagetable, uchar *src, uint sz)
 
 // Allocate PTEs and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
+//  用户进程的页表,当前已分配的内存大小,需要扩展到的内存大小
 uint64
 uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 {
   char *mem;
   uint64 a;
 
+  // 如果 newsz 小于 oldsz，则不需要扩展内存，直接返回 oldsz
   if(newsz < oldsz)
     return oldsz;
-
+  
+  // 将 oldsz 向上对齐到页大小的倍数
   oldsz = PGROUNDUP(oldsz);
+  // 从 oldsz 开始，循环逐页分配内存直到达到 newsz
   for(a = oldsz; a < newsz; a += PGSIZE){
+    // kalloc() 函数分配一个内存页
     mem = kalloc();
+    // 分配失败
     if(mem == 0){
+      // 调用 uvmdealloc() 函数释放已分配的内存
       uvmdealloc(pagetable, a, oldsz);
+      // 返回 0 表示失败
       return 0;
     }
+    // memset(mem, 0, PGSIZE) 将分配的内存页初始化为零
     memset(mem, 0, PGSIZE);
+    // mappages() 函数将物理内存页映射到用户页表中的虚拟地址 a
     if(mappages(pagetable, a, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+      // 映射失败，释放已分配的内存页
       kfree(mem);
+      // 释放之前分配的所有内存
       uvmdealloc(pagetable, a, oldsz);
       return 0;
     }
   }
+  // 所有页面都成功分配和映射，函数返回新的内存大小 newsz，表示扩展成功
   return newsz;
 }
 
