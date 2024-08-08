@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -96,19 +98,43 @@ walkaddr(pagetable_t pagetable, uint64 va)
 {
   pte_t *pte;
   uint64 pa;
+  struct proc *p=myproc();
 
   if(va >= MAXVA)
+  {
     return 0;
-
+  }
+  // 查找虚拟地址 va 对应的页表项
   pte = walk(pagetable, va, 0);
-  if(pte == 0)
-    return 0;
-  if((*pte & PTE_V) == 0)
-    return 0;
-  if((*pte & PTE_U) == 0)
-    return 0;
+
+  if(pte == 0 || (*pte & PTE_V) == 0)
+  {
+    if(va >= PGROUNDUP(p->trapframe->sp) && va < p->sz)
+    {
+        char *pa;
+        if ((pa = kalloc()) == 0) {
+            return 0;
+        }
+        // 将分配到的内存块的所有字节初始化为0
+        memset(pa, 0, PGSIZE);
+
+        // 如果 mappages 函数返回非零值，表示映射失败
+        if (mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE,(uint64) pa, PTE_W | PTE_R | PTE_U) != 0) 
+        {                   
+            // 释放之前分配的物理内存
+            kfree(pa);
+            return 0;
+        }
+    }
+    else{
+          return 0;
+        }
+    }
+    if((*pte & PTE_U) == 0){
+      return 0;
+    }    
   pa = PTE2PA(*pte);
-  return pa;
+  return pa; 
 }
 
 // add a mapping to the kernel page table.
@@ -330,9 +356,11 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
-      panic("uvmcopy: pte should exist");
+      // panic("uvmcopy: pte should exist");
+      continue;
     if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
+      // panic("uvmcopy: page not present");
+      continue;
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)

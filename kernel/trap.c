@@ -76,25 +76,31 @@ usertrap(void)
   else if(r_scause() == 13 || r_scause() == 15){
       // 引起pagefault的虚拟地址，需要分配物理内存并映射
       uint64 va = r_stval();
-      // 向下取整
-      va = PGROUNDDOWN(va);
-      // 分配内存
-      uint64 ka = (uint64)kalloc(); 
-      if(ka == 0){ 
-      // 分配物理内存失败，则杀死进程，且打印相关信息 
+      // 如果读入的虚拟地址比p->sz大、读入的虚拟地址比进程的用户栈小、申请空间不够、映射失败的时候都需要终止进程
+      if (va < p->sz && va > PGROUNDDOWN(p->trapframe->sp)){
+          // 分配内存
+          uint64 ka = (uint64)kalloc(); 
+          if(ka == 0){ 
+          // 分配物理内存失败，则杀死进程，且打印相关信息 
           p->killed = 1; 
           printf("usertrap(): kalloc() failed\n");
+          }else{
+                // 初始化置0
+                memset((void*)ka, 0, PGSIZE); 
+                // 向下取整
+                va = PGROUNDDOWN(va);
+                if(mappages(p->pagetable, va, PGSIZE, ka, PTE_U | PTE_W| PTE_R) != 0)
+                  {
+                    // 映射失败，则杀死进程，且打印相关信息
+                    kfree((void*)ka);
+                    printf("usertrap(): mappages() failed\n");
+                    p->killed = 1;
+                  }
+              }
       }else{
-      // 初始化置0
-      memset((void*)ka, 0, PGSIZE); 
-      if(mappages(p->pagetable, va, PGSIZE, ka, PTE_U | PTE_W| PTE_R) != 0)
-      {
-        // 映射失败，则杀死进程，且打印相关信息
-        kfree((void*)ka);
-        printf("usertrap(): mappages() failed\n");
-        p->killed = 1;
-      }
-    }
+          // 读入的虚拟地址比p->sz大，比用户栈小
+          p->killed = -1;
+      } 
   } 
   else if((which_dev = devintr()) != 0){
     // ok
