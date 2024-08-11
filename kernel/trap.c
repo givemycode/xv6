@@ -67,6 +67,34 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } // 当前异常原因是系统调用（ECALL）
+    else if(r_scause() == 15) {
+      // r_stval() 提供了导致异常的虚拟地址 va
+      uint64 va = r_stval(); 
+      // 获取PTE
+      pte_t *pte = walk(p->pagetable, va, 0); 
+      if (!(PTE_FLAGS(*pte) & PTE_COW)) {
+         // 如果页表项的标志位不包含 PTE_COW，则将进程p的killed标志设置为 1;
+         // 这通常意味着进程遇到了致命错误，需要被终止。
+         p->killed = 1;
+      }  else {
+         va = PGROUNDDOWN(va); //虚拟地址向下取整
+         uint64 ka = (uint64)kalloc(); //分配内存
+         if(ka == 0) {
+           p->killed = 1;
+         } else {
+           // 从页表项 *pte 中提取当前的标志位
+           uint64 flags = PTE_FLAGS(*pte);
+           // 清除 PTE_COW 标志
+           flags = flags & ~PTE_COW; 
+           // 使用 walkaddr 函数获取虚拟地址 va 对应的物理地址 pa
+           uint64 pa = walkaddr(p->pagetable, va); 
+           // 将旧物理页面的内容从 pa 复制到新分配的物理页面 ka
+           memmove((void*)ka, (void *)pa, PGSIZE); 
+           uvmunmap(p->pagetable, va, 1, 1);
+           mappages(p->pagetable, va, 1, ka, flags | PTE_W); //进行映射，权限设置为可写
+         }
+      } 
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
