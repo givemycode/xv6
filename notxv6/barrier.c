@@ -8,29 +8,48 @@ static int nthread = 1;
 static int round = 0;
 
 struct barrier {
+  // 定义了一个互斥锁变量barrier_mutex
   pthread_mutex_t barrier_mutex;
+  // 定义了一个条件变量barrier_cond
   pthread_cond_t barrier_cond;
-  int nthread;      // Number of threads that have reached this round of the barrier
+  // 表示参与同步的线程总数
+  int nthread;      
+  // 用于记录屏障的轮次
   int round;     // Barrier round
 } bstate;
 
 static void
 barrier_init(void)
 {
+  // 初始化
   assert(pthread_mutex_init(&bstate.barrier_mutex, NULL) == 0);
   assert(pthread_cond_init(&bstate.barrier_cond, NULL) == 0);
+  // 表示目前还没有线程到达屏障
   bstate.nthread = 0;
+  bstate.round = 0;
 }
 
-static void 
-barrier()
+// 每个线程在执行到屏障点时调用 barrier() 函数
+static void barrier()
 {
-  // YOUR CODE HERE
-  //
-  // Block until all threads have called barrier() and
-  // then increment bstate.round.
-  //
-  
+  // 获取互斥锁，确保对共享资源 bstate 的访问是互斥的
+  pthread_mutex_lock(&bstate.barrier_mutex);
+  if(++bstate.nthread == nthread) {
+    // 表示所有线程已到达，进入下一轮同步
+    bstate.round++;
+    // 重置为 0，为下一轮屏障做准备
+    bstate.nthread = 0;
+    //  唤醒所有在条件变量上等待的线程
+    pthread_cond_broadcast(&bstate.barrier_cond);  
+  }
+  else {
+    // 不是所有线程都到达了屏障，当前线程需要等待
+    // 等待期间，当前线程会释放互斥锁，允许其他线程进入临界区并可能成为第nthread个到达屏障的线程。
+    pthread_cond_wait(&bstate.barrier_cond, &bstate.barrier_mutex);
+  }
+  pthread_mutex_unlock(&bstate.barrier_mutex);
+
+  //所有线程在离开 barrier() 函数后继续它们的执行，此时它们已经同步，并且知道所有其他线程也已经通过了屏障。
 }
 
 static void *
