@@ -1,6 +1,10 @@
 #include "kernel/types.h"
 #include "kernel/stat.h"
 #include "user/user.h"
+#include "kernel/riscv.h"
+#include "kernel/spinlock.h"
+#include "kernel/param.h"
+#include "kernel/proc.h"
 
 /* Possible states of a thread: */
 #define FREE        0x0
@@ -10,15 +14,19 @@
 #define STACK_SIZE  8192
 #define MAX_THREAD  4
 
-
+// 表示一个线程的基本属性
 struct thread {
+  // 这是一个字符数组，用于存储线程的栈
   char       stack[STACK_SIZE]; /* the thread's stack */
+  // 表示线程的当前状态
   int        state;             /* FREE, RUNNING, RUNNABLE */
-
+  // 保存线程的寄存器上下文，以便在多线程调度中进行正确的切换和恢复
+  struct context threadContext;
 };
 struct thread all_thread[MAX_THREAD];
 struct thread *current_thread;
-extern void thread_switch(uint64, uint64);
+// 两个线程的执行上下文之间进行切换
+extern void thread_switch(struct context*, struct context*);
               
 void 
 thread_init(void)
@@ -63,6 +71,7 @@ thread_schedule(void)
      * Invoke thread_switch to switch from t to next_thread:
      * thread_switch(??, ??);
      */
+    thread_switch(&t->threadContext,&current_thread->threadContext);
   } else
     next_thread = 0;
 }
@@ -77,6 +86,10 @@ thread_create(void (*func)())
   }
   t->state = RUNNABLE;
   // YOUR CODE HERE
+  // ra 设置为 func 的地址，使线程在被调度时从 func 函数开始执行
+  t->threadContext.ra = (uint64)func;
+  // sp 设置为栈的顶部，确保线程有足够的栈空间来进行正常的函数调用和局部变量的存储
+  t->threadContext.sp = (uint64)(t->stack) + STACK_SIZE;
 }
 
 void 
