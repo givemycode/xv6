@@ -32,18 +32,27 @@
 
 // Contents of the header block, used for both the on-disk header block
 // and to keep track in memory of logged block# before commit.
+// 理解成一个向量，用来存放 block 编号
 struct logheader {
+  // n 指向 block[] 的已用区域中最后一个元素
   int n;
   int block[LOGSIZE];
 };
 
 struct log {
   struct spinlock lock;
+  // 记录了 logspace 逻辑上的第 1 块 block 的编号
+  // 在 xv6 中对应是第 2 块 block
   int start;
+  // 表示 logspace 包含的 block 数
+  // 在 xv6 中第 2 ～ 31 块 block 属于 logspace 
   int size;
+  // 记录了目前有多少个 system call 正在使用 File system
   int outstanding; // how many FS sys calls are executing.
+  // 就是 xv6 此时是否有事务正在 commit ，如果当前有事务正在 commit ，那么别的事务就应该等一等
   int committing;  // in commit(), please wait.
   int dev;
+  // logheader 是 logspace 的第 1 块 block
   struct logheader lh;
 };
 struct log log;

@@ -24,21 +24,28 @@ struct superblock {
 
 #define FSMAGIC 0x10203040
 
-#define NDIRECT 12
+// 将一级地址的个数从12 减少为 11 
+#define NDIRECT 11
 #define NINDIRECT (BSIZE / sizeof(uint))
-#define MAXFILE (NDIRECT + NINDIRECT)
+#define NDINDIRECT (BSIZE / sizeof(uint)*BSIZE / sizeof(uint))
+#define MAXFILE (NDIRECT + NINDIRECT + NDINDIRECT)
+
 
 // On-disk inode structure
 struct dinode {
-  short type;           // File type
-  short major;          // Major device number (T_DEVICE only)
-  short minor;          // Minor device number (T_DEVICE only)
-  short nlink;          // Number of links to inode in file system
-  uint size;            // Size of file (bytes)
-  uint addrs[NDIRECT+1];   // Data block addresses
+  short type;           // 常见文件类型（如目录、文件、设备等），其值为 0 表示该 dinode 此刻空闲
+  short major;          // 仅在 inode 表示设备文件时有效，主设备号用于标识设备的类型或类，例如硬盘、终端等
+  short minor;          // 同样仅在 inode 表示设备文件时有效，次设备号用于标识同一类型设备中的不同设备实例。例如，不同的硬盘分区可能有不同的次设备号。
+  short nlink;          // 当 nlink 变为 0 时，表示没有任何链接指向该 inode，系统可以将其回收
+  uint size;            // 文件的大小
+  uint addrs[NDIRECT+2];   // 文件内容所在的 block 编号
 };
 
+// 1 块 block 是 1024 字节
+// 1个inode（index node）是 64 字节
+// xv6将第 32 ～ 44 块 block 划分给 inodes
 // Inodes per block.
+// 每个磁盘块中可以存储的 inode 数量
 #define IPB           (BSIZE / sizeof(struct dinode))
 
 // Block containing inode i

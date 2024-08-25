@@ -192,21 +192,32 @@ static struct inode* iget(uint dev, uint inum);
 // Allocate an inode on device dev.
 // Mark it as allocated by  giving it type type.
 // Returns an unlocked but allocated and referenced inode.
-struct inode*
-ialloc(uint dev, short type)
+// ialloc 函数的作用是分配一个 inode，并将其标记为已分配。
+// 该函数在设备dev上寻找一个空闲的inode，将其类型设置为指定的 type，然后返回一个已分配但未上锁的inode
+struct inode* ialloc(uint dev, short type)
 {
+  // inode 编号
   int inum;
   struct buf *bp;
   struct dinode *dip;
-
+  
+  // 每次循环尝试读取一个 inode
   for(inum = 1; inum < sb.ninodes; inum++){
+    // 从设备 dev 上读取包含编号为 inum 的 inode 的块
     bp = bread(dev, IBLOCK(inum, sb));
+    // 定位到块中的具体 inode
     dip = (struct dinode*)bp->data + inum%IPB;
+    // 检查 inode 是否为空闲,即 type == 0
     if(dip->type == 0){  // a free inode
+      // 清空 inode 的内容
       memset(dip, 0, sizeof(*dip));
+      // 将 inode 的类型设置为 type，标记为已分配
       dip->type = type;
-      log_write(bp);   // mark it allocated on the disk
+      // 将更改记录到日志中并标记 inode 已在磁盘上分配
+      log_write(bp);   
+      // 释放缓存的块
       brelse(bp);
+      // 返回分配的 inode，并通过 iget 函数获取并返回一个引用到该 inode 的内存 inode 结构体
       return iget(dev, inum);
     }
     brelse(bp);
@@ -218,8 +229,8 @@ ialloc(uint dev, short type)
 // Must be called after every change to an ip->xxx field
 // that lives on disk, since i-node cache is write-through.
 // Caller must hold ip->lock.
-void
-iupdate(struct inode *ip)
+// 将 inode 中的内容回写至 disk 中
+void iupdate(struct inode *ip)
 {
   struct buf *bp;
   struct dinode *dip;
@@ -239,11 +250,14 @@ iupdate(struct inode *ip)
 // Find the inode with number inum on device dev
 // and return the in-memory copy. Does not lock
 // the inode and does not read it from disk.
+// 在 inode cache 中尝试寻找名为 dev ，编号为 inum 的 inode
+// 如果 inode 在 inode cache 中，则直接返回
+// 反之，则分配 1 个空闲块作为新 inode 
 static struct inode*
-iget(uint dev, uint inum)
+iget(uint dev, uint inum) // (设备号,inode 编号)
 {
   struct inode *ip, *empty;
-
+  
   acquire(&icache.lock);
 
   // Is the inode already cached?
@@ -329,8 +343,8 @@ iunlock(struct inode *ip)
 // to it, free the inode (and its content) on disk.
 // All calls to iput() must be inside a transaction in
 // case it has to free the inode.
-void
-iput(struct inode *ip)
+// iput() 所做的事是减少 inode 的引用计数，在没有其他 C 指针指向且无符号链接的时候将 inode 驱逐回 disk ，腾出空间。
+void iput(struct inode *ip)
 {
   acquire(&icache.lock);
 
@@ -374,17 +388,26 @@ iunlockput(struct inode *ip)
 
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
-static uint
-bmap(struct inode *ip, uint bn)
+// bn：block no;即 inode 文件的逻辑块号
+// 主要功能是返回 inode ip 中第 bn 个块的磁盘地址
+// 如果该块尚未分配，函数会分配一个新的磁盘块
+static uint bmap(struct inode *ip, uint bn)
 {
+  // addr：存储块地址的变量
+  // a：用于指向块地址数组的指针
+  // bp：用于缓存块数据的缓冲区指针
   uint addr, *a;
   struct buf *bp;
-
+  
+  // 要访问的块是 inode 直接块中的一部分
   if(bn < NDIRECT){
+    // 该块尚未分配
     if((addr = ip->addrs[bn]) == 0)
+      // 为该块分配一个新的磁盘块
       ip->addrs[bn] = addr = balloc(ip->dev);
     return addr;
   }
+  // 访问的是间接块中的块
   bn -= NDIRECT;
 
   if(bn < NINDIRECT){
@@ -400,12 +423,44 @@ bmap(struct inode *ip, uint bn)
     brelse(bp);
     return addr;
   }
+  // 说明 bn > NINDIRECT ，应该计算 block 在二级 indirect 目录中的逻辑编号
+  bn -= NINDIRECT;
+  if(bn >= NDINDIRECT) {
+    panic("bmap: out of range");
+  }
+  // 把二级 indirect 目录调至 Buffer cache 中
+  if((addr = ip->addrs[NDIRECT+1]) == 0){
+    ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+  }
+   bp = bread(ip->dev, addr);
+   // 定位到二级 indirect 目录 
+   a = (uint*)bp->data;
+   // 定位到二级 indirect 目录中的第 i 条 entry
+   uint i = bn/NINDIRECT;
+   // 第 bn 块 block 
+   bn %= NINDIRECT;
+   // 把三级的 indirect 目录调至 Buffer cache 中 
+  if((addr = a[i]) == 0) {
+    a[i] = addr = balloc(ip->dev);
+    log_write(bp);
+  }
+  brelse(bp);
 
-  panic("bmap: out of range");
+  bp = bread(ip->dev, addr);
+  // 定位到三级 indirect 目录
+  a = (uint*)bp->data; 
+  //
+  if((addr = a[bn]) == 0) { /**  */
+    a[bn] = addr = balloc(ip->dev);
+    log_write(bp);
+  }
+  brelse(bp);
+  return addr;
 }
 
 // Truncate inode (discard contents).
 // Caller must hold ip->lock.
+// 负责清空 inode 所包含的文件内容
 void
 itrunc(struct inode *ip)
 {
@@ -413,13 +468,14 @@ itrunc(struct inode *ip)
   struct buf *bp;
   uint *a;
 
+  // 清空一级 indirect 目录
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
       bfree(ip->dev, ip->addrs[i]);
       ip->addrs[i] = 0;
     }
   }
-
+  // 清空二级 indirect 目录
   if(ip->addrs[NDIRECT]){
     bp = bread(ip->dev, ip->addrs[NDIRECT]);
     a = (uint*)bp->data;
@@ -431,7 +487,32 @@ itrunc(struct inode *ip)
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
   }
+   // 清空三级 indirect 目录 
+  if(!ip->addrs[NDIRECT+1])
+    goto truncDone;
 
+  bp = bread(ip->dev, ip->addrs[NDIRECT+1]);
+  // 先定位到二级 indirect 目录
+  a = (uint*)bp->data; 
+  // 遍历二级目录中的每个非空三级 indirect 目录 
+  for(int i=0; i<NINDIRECT; i++) {  
+    if(!a[i])
+      continue;
+    
+    struct buf *bp2 = bread(ip->dev, *(a+i));
+    // 定位到非空的三级 indirect 目录
+    uint *a2 = (uint*)bp2->data; 
+    for(int j=0; j<NINDIRECT; j++) {
+      if(a2[j]) bfree(ip->dev, a2[j]);    
+    }
+    a2[j] = 0;
+    brelse(bp2);
+  }
+  brelse(bp);
+  bfree(ip->dev, ip->addrs[NDIRECT+1]);
+  ip->addrs[NDIRECT+1] = 0;
+
+truncDone:
   ip->size = 0;
   iupdate(ip);
 }

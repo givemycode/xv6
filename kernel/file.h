@@ -15,8 +15,9 @@ struct file {
 
 // in-memory copy of an inode
 struct inode {
-  uint dev;           // Device number
-  uint inum;          // Inode number
+  uint dev;           // 名
+  uint inum;          // 编号
+  // 此时有多少 C 指针正指向该 inode ，只有当没有 C 指针再指向该 inode 时，kernel 才会考虑将其驱逐回 disk
   int ref;            // Reference count
   struct sleeplock lock; // protects everything below here
   int valid;          // inode has been read from disk?
@@ -24,9 +25,9 @@ struct inode {
   short type;         // copy of disk inode
   short major;
   short minor;
-  short nlink;
+  short nlink;        // 符号链接
   uint size;
-  uint addrs[NDIRECT+1];
+  uint addrs[NDIRECT+2];
 };
 
 // map major device number to device functions.
