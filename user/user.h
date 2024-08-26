@@ -23,6 +23,10 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+// 第一个参数符号链接要指向文件路径名为 target 的 inode
+// 第二个参数为 path ，也就是新符号链接的路径名
+int symlink(char*, char*);
+
 
 // ulib.c
 int stat(const char*, struct stat*);

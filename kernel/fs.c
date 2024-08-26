@@ -26,6 +26,8 @@
 // only one device
 struct superblock sb; 
 
+
+
 // Read the super block.
 static void
 readsb(int dev, struct superblock *sb)
@@ -753,3 +755,5 @@ nameiparent(char *path, char *name)
 {
   return namex(path, 1, name);
 }
+
+

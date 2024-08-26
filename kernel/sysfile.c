@@ -283,45 +283,89 @@ create(char *path, short type, short major, short minor)
   return ip;
 }
 
-uint64
-sys_open(void)
+uint64 sys_open(void)
 {
   char path[MAXPATH];
   int fd, omode;
+  // 指向文件结构的指针
   struct file *f;
-  struct inode *ip;
+  struct inode *ip,*dp;
+  // 用于存储从参数中读取的字符串长度
   int n;
 
+  // 从系统调用的第 0 个参数获取路径字符串
+  // 从系统调用的第 1 个参数获取打开模式
   if((n = argstr(0, path, MAXPATH)) < 0 || argint(1, &omode) < 0)
+  {
     return -1;
-
+  }  
+  // 标记文件系统操作的开始，确保一致性
   begin_op();
-
-  if(omode & O_CREATE){
+  // 检查是否需要创建文件
+  if(omode & O_CREATE)
+  {
+    // T_FILE 表示创建一个普通文件
     ip = create(path, T_FILE, 0, 0);
-    if(ip == 0){
+    if(ip == 0)
+    {
       end_op();
       return -1;
     }
-  } else {
-    if((ip = namei(path)) == 0){
+  } 
+  else 
+  {
+    if((ip = namei(path)) == 0)
+    {
+      // 路径 path 不对应任何现有的 inode
       end_op();
       return -1;
     }
     ilock(ip);
-    if(ip->type == T_DIR && omode != O_RDONLY){
+    // 尝试以非只读模式打开目录，这是不允许的
+    if(ip->type == T_DIR && omode != O_RDONLY)
+    {
       iunlockput(ip);
       end_op();
       return -1;
     }
   }
-
+  if(!(omode & O_NOFOLLOW))
+  {
+    int i = 0;
+    for( ;i<10 && ip->type==T_SYMLINK;++i)
+    {
+      if(readi(ip,0,(uint64)path,0,MAXPATH)== 0)
+      {
+        iunlockput(ip);
+        end_op();
+        return -1;
+      }
+      if((dp= namei(path))== 0)
+      {
+        iunlockput(ip);
+        end_op();
+        return -1;
+      }
+        iunlockput(ip);
+        ip = dp;
+        ilock(ip);
+    }
+    if(i == 10)
+    {
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }
+  }
+  // 如果文件是设备类型（T_DEVICE），并且其主设备号无效（小于 0 或大于等于 NDEV），则执行错误处理
   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
     iunlockput(ip);
     end_op();
     return -1;
   }
-
+  // filealloc 是一个函数，用于分配和初始化一个新的 file 结构体
+  // file 结构体用于描述一个打开的文件，包括其状态、指针和其他元数据；
+  // fdalloc 是一个函数，用于分配一个文件描述符，并将其与 file 结构体 f 关联
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
     if(f)
       fileclose(f);
@@ -349,6 +393,7 @@ sys_open(void)
   end_op();
 
   return fd;
+  
 }
 
 uint64
@@ -483,4 +528,48 @@ sys_pipe(void)
     return -1;
   }
   return 0;
+}
+
+// 符号链接是一种特殊的文件，其内容是指向另一个文件或目录的路径
+// 返回值为 0 表示成功，为 -1 表示失败
+uint64 sys_symlink(void)
+{
+  struct inode *ip,*dp;
+  // target 是目标文件的路径，用于存储符号链接指向的路径
+  // path 是符号链接的路径，用于存储符号链接本身的路径
+  char target[MAXPATH], path[MAXPATH];
+  // 使用 argstr 函数从系统调用的参数中获取两个路径字符串
+  // 若任一参数获取失败，函数返回 -1
+  if(argstr(0, target, MAXPATH)<0 || argstr(1, path, MAXPATH)<0){
+      return -1;
+  }
+  // 用于标记文件系统操作的开始
+  begin_op();
+  if((ip = namei(target)) !=0){
+    if(ip->type == T_DIR){
+      goto bad;
+    }
+  }
+  /** 尝试分配一个名为 path 的 inode 作为符号链接节点 */
+  if((dp=create(path, T_SYMLINK, 0, 0)) == 0) { 
+    goto bad;
+  }
+
+  /** 将 target 文件路径名写入 ip 的第一块 block 中 */
+  if(writei(dp, 0, (uint64)target, 0, MAXPATH) != MAXPATH) {  
+    panic("symlink:writei");
+  }
+
+  // 释放 inode 锁，并减少其引用计数。
+  // 如果引用计数为 0，inode 会被释放。
+  iunlockput(dp); /** iunlockput = iunlock + iput */
+  
+  // 结束文件系统操作
+  end_op();
+  // 符号链接创建成功
+  return 0;
+
+  bad:
+  end_op();
+  return -1;
 }

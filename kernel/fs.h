@@ -25,6 +25,7 @@ struct superblock {
 #define FSMAGIC 0x10203040
 
 // 将一级地址的个数从12 减少为 11 
+#define SYMLINKDEPTH 10
 #define NDIRECT 11
 #define NINDIRECT (BSIZE / sizeof(uint))
 #define NDINDIRECT (BSIZE / sizeof(uint)*BSIZE / sizeof(uint))
