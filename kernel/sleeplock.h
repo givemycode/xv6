@@ -1,4 +1,15 @@
-// Long-term locks for processes
+// // Long-term locks for processes
+// struct sleeplock {
+//   uint locked;       // Is the lock held?
+//   struct spinlock lk; // spinlock protecting this sleep lock
+  
+//   // For debugging:
+//   char *name;        // Name of lock.
+//   int pid;           // Process holding lock
+// };
+#ifndef SLEEPLOCK_H
+#define SLEEPLOCK_H
+
 struct sleeplock {
   uint locked;       // Is the lock held?
   struct spinlock lk; // spinlock protecting this sleep lock
@@ -7,4 +18,6 @@ struct sleeplock {
   char *name;        // Name of lock.
   int pid;           // Process holding lock
 };
+
+#endif // SLEEPLOCK_H
 
